@@ -7,28 +7,29 @@ import numpy as np
 
 def convert_parsing():
     coco_folder = '/xuhanzhu/CIHP/'
-    cihp_coco = COCO(coco_folder + '/annotations/CIHP_train.json')
+    cihp_coco = COCO(coco_folder + '/annotations/CIHP_val.json')
     im_ids = cihp_coco.getImgIds()
     ann_ids = cihp_coco.getAnnIds(imgIds=im_ids)
     anns = cihp_coco.loadAnns(ann_ids)
-    for i, obj in enumerate(anns):
-        if i % 50 == 0:
-            print(i)
-        parsing_name = os.path.join(coco_folder + 'train_parsing', obj['parsing'])
-        parsing = cv2.imread(parsing_name)
-        for p in range(19):
-            if p == 1 or p == 2 or p == 4 or p == 13:
-                parsing[parsing == p] = 14
-            elif p == 5 or p == 10 or p == 7:
-                parsing[parsing == p] = 1
-            elif p == 18:
-                parsing[parsing == p] = 4
-            elif p == 19:
-                parsing[parsing == p] = 5
-            else:
-                parsing[parsing == p] = 0
-        save_name = os.path.join(coco_folder + 'train_parsing_uv', obj['parsing'])
-        cv2.imwrite(save_name, parsing)
+    print(anns[0], anns[1])
+    # for i, obj in enumerate(anns):
+        # if i % 50 == 0:
+        #     print(i)
+        # parsing_name = os.path.join(coco_folder + 'val_parsing', obj['parsing'])
+        # parsing = cv2.imread(parsing_name)
+        # for p in range(0, 20):
+        #     if p == 1 or p == 2 or p == 4 or p == 13:
+        #         parsing[parsing == p] = 14
+        #     elif p == 5 or p == 10 or p == 7:
+        #         parsing[parsing == p] = 1
+        #     elif p == 18:
+        #         parsing[parsing == p] = 4
+        #     elif p == 19:
+        #         parsing[parsing == p] = 5
+        #     else:
+        #         parsing[parsing == p] = 0
+        # save_name = os.path.join(coco_folder + 'val_parsing_uv', obj['parsing'])
+        # cv2.imwrite(save_name, parsing)
 
 
 def vis_parsing(path):
@@ -40,4 +41,4 @@ def vis_parsing(path):
     cv2.imwrite('vis_train_{}_{}.png'.format(str(0), str(0)), parsing_color)
 
 convert_parsing()
-vis_parsing("/xuhanzhu/CIHP/train_parsing_uv/0000006-1.png")
+# vis_parsing("/xuhanzhu/CIHP/val_parsing_uv/0000001-1.png")
