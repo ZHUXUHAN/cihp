@@ -19,7 +19,7 @@ def GetDensePoseMask(Polys):
 
 def seg2mask():
     coco_folder = '/xuhanzhu/mscoco2014'
-    cihp_coco = COCO(coco_folder + '/annotations/densepose_coco_2014_train.json')
+    cihp_coco = COCO(coco_folder + '/annotations/densepose_coco_2014_minival.json')
     im_ids = cihp_coco.getImgIds()[0]
     im = cihp_coco.loadImgs(ids=im_ids)[0]
     ann_ids = cihp_coco.getAnnIds(imgIds=im_ids)
@@ -70,12 +70,12 @@ def vis_parsing(path):
     parsing_color_list = colormap_utils.dict_bgr2rgb(parsing_color_list)
     colormap = colormap_utils.dict2array(parsing_color_list)
     parsing_color = colormap[parsing.astype(np.int)]
-    cv2.imwrite('vis_train_{}_{}.png'.format(str(1), str(1)), parsing_color)
+    cv2.imwrite('vis_train_{}_{}.png'.format(str(10), str(10)), parsing_color)
 
 
 def convert_json():
     coco_folder = '/xuhanzhu/mscoco2014'
-    json_path = coco_folder + '/annotations/densepose_coco_2014_valminusminival.json'
+    json_path = coco_folder + '/annotations/densepose_coco_2014_minival.json'
     cihp_coco = COCO(json_path)
     chip_json = json.load(open(json_path, 'r'))
     images = chip_json['images']
@@ -83,7 +83,7 @@ def convert_json():
     annotations = []
     im_ids = cihp_coco.getImgIds()
     for i, im_id in enumerate(im_ids):
-        if i % 10 == 0:
+        if i % 50 == 0:
             print(i)
 
         ann_ids = cihp_coco.getAnnIds(imgIds=im_id)
@@ -91,19 +91,22 @@ def convert_json():
         im = cihp_coco.loadImgs(im_id)[0]
         height = im['height']
         width = im['width']
+
         for ii, ann in enumerate(anns):
             if 'dp_masks' in ann:
-                box = anns[0]["bbox"]
-                box_x = box[0]
-                box_y = box[1]
-                box_w = box[2]
-                box_h = box[3]
+                img = np.zeros((height, width))
+                bbr = np.array(ann['bbox']).astype(int)  # the box.
+                x1, y1, x2, y2 = bbr[0], bbr[1], bbr[0] + bbr[2], bbr[1] + bbr[3]
+                x2 = min([x2, width]);
+                y2 = min([y2, height])
 
                 segment = ann["dp_masks"]
                 Mask = GetDensePoseMask(segment)
-                new_name = os.path.splitext(im['file_name'])[0] + '_%d'%ii + '.png'
-                new_path = os.path.join(coco_folder, 'mask_ann', new_name)
-                cv2.imwrite(new_path, Mask)
+                MaskIm = cv2.resize(Mask, (int(x2 - x1), int(y2 - y1)), interpolation=cv2.INTER_NEAREST)
+                img[y1:y2, x1:x2] = MaskIm
+                new_name = os.path.splitext(im['file_name'])[0] + '_%d' % ii + '.png'
+                new_path = os.path.join(coco_folder, 'val_parsing_uv', new_name)
+                cv2.imwrite(new_path, img)
                 ann["parsing"] = new_name
                 annotations.append(ann)
             else:
@@ -126,15 +129,17 @@ def convert_json():
             # else:
             #     continue
 
-    save_json_path = coco_folder + '/annotations/densepose_segmentation_coco_2014_valminusminival.json'
+    save_json_path = coco_folder + '/annotations/densepose_parsing_coco_2014_minival.json'
     data_coco = {'images': images, 'categories': categories, 'annotations': annotations}
     json.dump(data_coco, open(save_json_path, 'w'), indent=4)
 
 
 if __name__ == "__main__":
-    path = "/xuhanzhu/CIHP/val_parsing/0011578-5.png"
-    im = cv2.imread('/xuhanzhu/CIHP/val_img/0011578.jpg')
-    cv2.imwrite("0011578.png", im)
+    # path = "/xuhanzhu/mscoco2014/train_parsing_uv/COCO_train2014_000000329592_0.png"
+    # path1 = "/xuhanzhu/CIHP/val_parsing_uv/0015242-6.png"
     # m = seg2mask()
-    vis_parsing(path)
-    # convert_json()
+    # vis_parsing(path)
+    convert_json()
+
+    # img_uv = cv2.imread(path)
+    # img_parsing = cv2.imread(path1)
