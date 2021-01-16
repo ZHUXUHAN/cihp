@@ -73,6 +73,44 @@ def vis_parsing(path):
     cv2.imwrite('vis_train_{}_{}.png'.format(str(10), str(10)), parsing_color)
 
 
+def convert_seg():
+    coco_folder = '/xuhanzhu/mscoco2014'
+    json_path = coco_folder + '/annotations/densepose_coco_2014_minival.json'
+    cihp_coco = COCO(json_path)
+    im_ids = cihp_coco.getImgIds()
+    for i, im_id in enumerate(im_ids):
+        if i % 50 == 0:
+            print(i)
+
+        ann_ids = cihp_coco.getAnnIds(imgIds=im_id)
+        anns = cihp_coco.loadAnns(ann_ids)
+        im = cihp_coco.loadImgs(im_id)[0]
+        height = im['height']
+        width = im['width']
+
+        img = np.zeros((height, width))
+
+        for ii, ann in enumerate(anns):
+            if 'dp_masks' in ann:
+                bbr = np.array(ann['bbox']).astype(int)  # the box.
+                x1, y1, x2, y2 = bbr[0], bbr[1], bbr[0] + bbr[2], bbr[1] + bbr[3]
+                x2 = min([x2, width]);
+                y2 = min([y2, height])
+
+                segment = ann["dp_masks"]
+                Mask = GetDensePoseMask(segment)
+                MaskIm = cv2.resize(Mask, (int(x2 - x1), int(y2 - y1)), interpolation=cv2.INTER_NEAREST)
+                img[y1:y2, x1:x2] = MaskIm
+            new_name = os.path.splitext(im['file_name'])[0] + '.png'
+            new_path = os.path.join(coco_folder, 'val_seg_uv', new_name)
+            # print(new_path)
+            if not os.path.exists(new_path):
+                print(new_path)
+                assert False, 'No'
+            else:
+                cv2.imwrite(new_path, img)
+
+
 def convert_json():
     coco_folder = '/xuhanzhu/mscoco2014'
     json_path = coco_folder + '/annotations/densepose_coco_2014_minival.json'
@@ -91,6 +129,8 @@ def convert_json():
         im = cihp_coco.loadImgs(im_id)[0]
         height = im['height']
         width = im['width']
+
+        img = np.zeros((height, width))
 
         for ii, ann in enumerate(anns):
             if 'dp_masks' in ann:
@@ -139,7 +179,8 @@ if __name__ == "__main__":
     # path1 = "/xuhanzhu/CIHP/val_parsing_uv/0015242-6.png"
     # m = seg2mask()
     # vis_parsing(path)
-    convert_json()
+    # convert_json()
+    convert_seg()
 
     # img_uv = cv2.imread(path)
     # img_parsing = cv2.imread(path1)
