@@ -16,7 +16,6 @@ def vis_parsing(path, dir):
     parsing_color = colormap[parsing.astype(np.int)]
     cv2.imwrite(os.path.join(dir, os.path.basename(path)), parsing_color)
 
-
 def fast_hist(a, b, n):
     k = (a >= 0) & (a < n)
     return np.bincount(n * a[k].astype(int) + b[k], minlength=n ** 2).reshape(n, n)
@@ -168,32 +167,33 @@ def keypoints():
 def comput_iou_pp():
     # a = '/home/zhuxuhan/par_pretrain/ckpts/rcnn/CIHP/my_experiment/baseline_R-50-FPN-COCO_s1x_ms/test/parsing_instances/0000001_2.png'
     # b = '/xuhanzhu/CIHP/val_parsing/0000001-1.png'
-    pred_dir = '/home/zhuxuhan/par_pretrain/ckpts/rcnn/CIHP/my_experiment/baseline_R-50-FPN-COCO_s1x_ms/test/parsing_instances/'
-    pred_all_dir = '/home/zhuxuhan/par_pretrain/ckpts/rcnn/CIHP/my_experiment/baseline_R-50-FPN-COCO_s1x_ms/test/parsing_predict/'
+    pred_dir = '/home/xuhanzhu/panet/ckpts/rcnn/CIHP/uvann/baseline-R50-FPN-COCO_1x_ms/test/parsing_instances/'
+    pred_all_dir = '/home/xuhanzhu/panet/ckpts/rcnn/CIHP/uvann/baseline-R50-FPN-COCO_1x_ms/test/parsing_predict'
     predict_files = os.listdir(pred_all_dir)
     predict_fs = []
-    save_dir = '/home/zhuxuhan/inference_par/vis_ori_par'
-    save_dir_par = '/home/zhuxuhan/inference_par/par'
+    save_dir = '/home/xuhanzhu/inference_par/vis_ori_par'
+    save_dir_par = '/home/xuhanzhu/inference_par/par'
     for p_f in predict_files:
         filename = os.path.basename(p_f).split('.')[0]
         predict_fs.append(filename)
-    ann_root = '/xuhanzhu/CIHP/val_parsing/'
+    ann_root = '/xuhanzhu/CIHP/train_parsing/'
     d = 0
     predict_fs = sorted(predict_fs)
+
     for p_f in predict_fs:
-        if d==10:
-            break
+        if d%100==0:
+           print(d)
         # p_f_s = p_f.split('_')[0]
         p_f_s = p_f
         par_pred_list = glob.glob(pred_dir + p_f_s + '*.png')
         par_f_list = glob.glob(ann_root + p_f_s + '*.png')
-        ann_all = cv2.imread('/xuhanzhu/CIHP/val_seg/{}.png'.format(p_f_s), 0)
+        ann_all = cv2.imread('/xuhanzhu/CIHP/train_seg/{}.png'.format(p_f_s), 0)
         pred_all = cv2.imread(os.path.join(pred_all_dir, p_f_s + '.png'), 0)
+        # vis_parsing(os.path.join(pred_all_dir, p_f_s + '.png'), '/home/xuhanzhu/inference_par/vis_par_ins')
         save_name = p_f_s + '.png'
         result_numpy = np.zeros_like(pred_all)
         for p in par_pred_list:
             pre = cv2.imread(p, 0)
-            print(p)
             for f in par_f_list:
                 ann = cv2.imread(f, 0)
                 ann_p_copy = np.zeros_like(ann)
@@ -201,8 +201,8 @@ def comput_iou_pp():
                 ann_p_copy[ann > 0] = 1
                 pred_p_copy[pre > 0] = 1
                 iu = cal_one_mean_iou(ann_p_copy, pred_p_copy, 2)
+
                 if iu[1] > 0.5:
-                    max_numpy = np.zeros((15, 20))
                     #### 每个人的
                     for i in range(15):
                         if (pre == i).any():
@@ -210,15 +210,11 @@ def comput_iou_pp():
                             maxid = np.argsort(bin_number)
                             if len(maxid) > 1:
                                 for mid in reversed(range(len(maxid))):
-                                    # if mid < len(maxid)-2:
+                                    # if mid < len(maxid)-1:
                                     #     continue
                                     if maxid[mid] and bin_number[maxid[mid]] > 0:
-                                        if mid == len(maxid):
-                                            result_bool_1 = (pre == i) & (ann == maxid[mid])
-                                            result_numpy[result_bool_1] = i
-                                        else:
-                                            result_bool_2 = (pre == i) & (ann == maxid[mid]) & (result_numpy == 0)
-                                            result_numpy[result_bool_2] = i
+                                        result_bool_1 = (pre == i) & (ann == maxid[mid]) & (result_numpy == 0)
+                                        result_numpy[result_bool_1] = i
                             else:
                                 if maxid[0] > 0:
                                     result_bool_1 = (pre == i) & (ann == maxid[0])
@@ -230,22 +226,18 @@ def comput_iou_pp():
                 maxid = np.argsort(bin_number)
                 if len(maxid) > 1:
                     for mid in reversed(range(len(maxid))):
-                        if mid < len(maxid) - 2:
+                        if mid < len(maxid)-2:
                             continue
                         if maxid[mid] and bin_number[maxid[mid]] > 0:
-                            if mid == len(maxid):
-                                result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
-                                result_numpy[result_bool_1] = i
-                            else:
-                                result_bool_2 = (ann_all == maxid[mid]) & (result_numpy == 0)
-                                result_numpy[result_bool_2] = i
+                            result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
+                            result_numpy[result_bool_1] = i
                 else:
                     if maxid[0] > 0:
                         result_bool_1 = (ann_all == maxid[0]) & (result_numpy == 0)
                         result_numpy[result_bool_1] = i
         cv2.imwrite(os.path.join(save_dir_par, save_name), result_numpy)
-        vis_parsing(os.path.join(save_dir_par, save_name), '/home/zhuxuhan/inference_par/vis_par')
-        vis_parsing('/xuhanzhu/CIHP/val_seg/{}.png'.format(p_f_s), save_dir)
+        vis_parsing(os.path.join(save_dir_par, save_name), '/home/xuhanzhu/inference_par/vis_par')
+        vis_parsing('/xuhanzhu/CIHP/train_seg/{}.png'.format(p_f_s), save_dir)
         d += 1
 
 # compute_ious()
