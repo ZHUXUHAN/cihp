@@ -75,7 +75,7 @@ def vis_parsing(path):
 
 def convert_seg():
     coco_folder = '/xuhanzhu/mscoco2014'
-    json_path = coco_folder + '/annotations/densepose_coco_2014_minival.json'
+    json_path = coco_folder + '/annotations/densepose_coco_2014_train.json'
     cihp_coco = COCO(json_path)
     im_ids = cihp_coco.getImgIds()
     for i, im_id in enumerate(im_ids):
@@ -89,9 +89,13 @@ def convert_seg():
         width = im['width']
 
         img = np.zeros((height, width))
-
+        new_name = os.path.splitext(im['file_name'])[0] + '.png'
+        new_path = os.path.join(coco_folder, 'train_seg_uv', new_name)
+        print(new_path)
+        d = 0
         for ii, ann in enumerate(anns):
             if 'dp_masks' in ann:
+                d += 1
                 bbr = np.array(ann['bbox']).astype(int)  # the box.
                 x1, y1, x2, y2 = bbr[0], bbr[1], bbr[0] + bbr[2], bbr[1] + bbr[3]
                 x2 = min([x2, width]);
@@ -101,14 +105,11 @@ def convert_seg():
                 Mask = GetDensePoseMask(segment)
                 MaskIm = cv2.resize(Mask, (int(x2 - x1), int(y2 - y1)), interpolation=cv2.INTER_NEAREST)
                 img[y1:y2, x1:x2] = MaskIm
-            new_name = os.path.splitext(im['file_name'])[0] + '.png'
-            new_path = os.path.join(coco_folder, 'val_seg_uv', new_name)
-            # print(new_path)
-            if not os.path.exists(new_path):
-                print(new_path)
-                assert False, 'No'
-            else:
-                cv2.imwrite(new_path, img)
+        if d > 0:
+            d = 0
+            cv2.imwrite(new_path, img)
+        else:
+            continue
 
 
 def convert_json():
@@ -174,13 +175,44 @@ def convert_json():
     json.dump(data_coco, open(save_json_path, 'w'), indent=4)
 
 
+def get_ann(id=4219):
+    coco_folder = '/xuhanzhu/mscoco2014'
+    cihp_coco = COCO(coco_folder + '/annotations/densepose_parsing_coco_2014_minival.json')
+    im_ids = cihp_coco.getImgIds()
+    # ann_ids = cihp_coco.getAnnIds(imgIds=[sorted(im_ids)[id-1]])
+    ann_ids = cihp_coco.getAnnIds(imgIds=[id])
+    for ann_id in ann_ids:
+        ann = cihp_coco.loadAnns(ann_id)[0]
+        # print(ann['bbox'])  # the box.)
+        print(ann)
+
+
+def move_person_data():
+    import shutil
+    coco_folder = '/xuhanzhu/mscoco2014'
+    img_dir = '/xuhanzhu/mscoco2014/train2014'
+    cihp_coco = COCO(coco_folder + '/annotations/densepose_coco_2014_train.json')
+    im_ids = cihp_coco.getImgIds()
+    new_dir = '/xuhanzhu/train_input'
+    for im_id in im_ids:
+        im = cihp_coco.loadImgs(im_id)[0]
+        filename = im['file_name']
+        print(filename)
+        ori_path = os.path.join(img_dir, filename)
+        new_path = os.path.join(new_dir, filename)
+        shutil.copy(ori_path, new_path)
+
+
 if __name__ == "__main__":
     # path = "/xuhanzhu/mscoco2014/train_parsing_uv/COCO_train2014_000000329592_0.png"
     # path1 = "/xuhanzhu/CIHP/val_parsing_uv/0015242-6.png"
     # m = seg2mask()
     # vis_parsing(path)
     # convert_json()
-    convert_seg()
+    # convert_seg()
 
+    # get_ann(id=5)
     # img_uv = cv2.imread(path)
     # img_parsing = cv2.imread(path1)
+    # move_person_data()
+    get_ann(id=2324)

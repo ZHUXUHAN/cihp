@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import shutil
 import json
 import pickle
 import glob
@@ -8,13 +9,31 @@ from pycocotools.coco import COCO
 import colormap as colormap_utils
 
 
-def vis_parsing(path, dir):
+def vis_parsing(path, dir, colormap, im_ori, draw_contours):
     parsing = cv2.imread(path, 0)
-    parsing_color_list = eval('colormap_utils.{}'.format('CIHP20'))  # CIHP20
+    parsing_color_list = eval('colormap_utils.{}'.format(colormap))  # CIHP20
     parsing_color_list = colormap_utils.dict_bgr2rgb(parsing_color_list)
     colormap = colormap_utils.dict2array(parsing_color_list)
     parsing_color = colormap[parsing.astype(np.int)]
-    cv2.imwrite(os.path.join(dir, os.path.basename(path)), parsing_color)
+
+    parsing_alpha = 0.9
+    idx = np.nonzero(parsing)
+    im_ori = im_ori.astype(np.float32)
+    im_ori[idx[0], idx[1], :] *= 1.0 - parsing_alpha
+    im_ori += parsing_alpha * parsing_color
+    ######
+    if draw_contours:
+        contours, _ = cv2.findContours(parsing.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        parsing_color = parsing_color.astype(np.uint8)
+        cv2.drawContours(im_ori, contours, -1, (0, 0, 255), 1)
+    # M = cv2.moments(contours[1])  # 计算第一条轮廓的各阶矩,字典形式
+    # center_x = int(M["m10"] / M["m00"])
+    # center_y = int(M["m01"] / M["m00"])
+    # cv2.circle(parsing_color, (center_x, center_y), 30, 128, -1)  # 绘制中心点
+    # print(center_x, center_y)
+
+    cv2.imwrite(os.path.join(dir, os.path.basename(path)), im_ori)
+
 
 def fast_hist(a, b, n):
     k = (a >= 0) & (a < n)
@@ -164,15 +183,37 @@ def keypoints():
     # img1 = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
 
 
-def comput_iou_pp():
-    # a = '/home/zhuxuhan/par_pretrain/ckpts/rcnn/CIHP/my_experiment/baseline_R-50-FPN-COCO_s1x_ms/test/parsing_instances/0000001_2.png'
-    # b = '/xuhanzhu/CIHP/val_parsing/0000001-1.png'
-    pred_dir = '/home/xuhanzhu/panet/ckpts/rcnn/CIHP/uvann/baseline-R50-FPN-COCO_1x_ms/test/parsing_instances/'
-    pred_all_dir = '/home/xuhanzhu/panet/ckpts/rcnn/CIHP/uvann/baseline-R50-FPN-COCO_1x_ms/test/parsing_predict'
+def compute_iou_pp():
+    datatset = 'CIHP-COCO' # source data
+    model = 'CIHP'
+    class_num = 15
+    pred_dir = '/xuhanzhu/iccv_panet/ckpts/ICCV/Parsing/parsing_R-101-FPN-COCO-PAR-USEANN_s1x_ms/test/parsing_instances/'
+    pred_all_dir = '/xuhanzhu/iccv_panet/ckpts/ICCV/Parsing/parsing_R-101-FPN-COCO-PAR-USEANN_s1x_ms/test/parsing_predict/'
+    # pred_dir = '/xuhanzhu/mscoco2014/train_parsing_cdcl/'
+    # pred_all_dir = '/xuhanzhu/CDCL-human-part-segmentation/output_coco/'
     predict_files = os.listdir(pred_all_dir)
     predict_fs = []
-    save_dir = '/home/xuhanzhu/inference_par/vis_ori_par'
-    save_dir_par = '/home/xuhanzhu/inference_par/par'
+    save_dir = '/xuhanzhu/inference_par/%s/vis_ori_par' % datatset  # train_seg 原标注的可视化图
+    save_dir_par = '/xuhanzhu/inference_par/%s/par' % datatset  # 变换后的mask未上色图
+    save_dir_par_ins = '/xuhanzhu/inference_par/%s/vis_par_ins' % datatset  # 预测结果
+    save_dir_par_ori = '/xuhanzhu/inference_par/%s/vis_par' % datatset  # 变换后的结果
+    # ori_img_dir = '/xuhanzhu/%s/train2014' % datatset
+    ori_img_dir = '/xuhanzhu/CIHP/train_img'
+    img_dir = '/xuhanzhu/inference_par/%s/img' % datatset
+    con_dir = '/xuhanzhu/inference_par/%s/vis_par_ins_con' % datatset
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    if not os.path.exists(save_dir_par):
+        os.makedirs(save_dir_par)
+    if not os.path.exists(save_dir_par_ins):
+        os.makedirs(save_dir_par_ins)
+    if not os.path.exists(save_dir_par_ori):
+        os.makedirs(save_dir_par_ori)
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+    if not os.path.exists(con_dir):
+        os.makedirs(con_dir)
+
     for p_f in predict_files:
         filename = os.path.basename(p_f).split('.')[0]
         predict_fs.append(filename)
@@ -181,17 +222,19 @@ def comput_iou_pp():
     predict_fs = sorted(predict_fs)
 
     for p_f in predict_fs:
-        if d%100==0:
-           print(d)
+        if d % 100 == 0:
+            print(d)
         # p_f_s = p_f.split('_')[0]
         p_f_s = p_f
+        # shutil.copy(os.path.join(ori_img_dir, p_f_s + '.jpg'), os.path.join(img_dir, p_f_s + '.jpg'))
+        ori_img = cv2.imread(os.path.join(ori_img_dir, p_f_s + '.jpg'))
         par_pred_list = glob.glob(pred_dir + p_f_s + '*.png')
         par_f_list = glob.glob(ann_root + p_f_s + '*.png')
         ann_all = cv2.imread('/xuhanzhu/CIHP/train_seg/{}.png'.format(p_f_s), 0)
         pred_all = cv2.imread(os.path.join(pred_all_dir, p_f_s + '.png'), 0)
-        # vis_parsing(os.path.join(pred_all_dir, p_f_s + '.png'), '/home/xuhanzhu/inference_par/vis_par_ins')
         save_name = p_f_s + '.png'
         result_numpy = np.zeros_like(pred_all)
+
         for p in par_pred_list:
             pre = cv2.imread(p, 0)
             for f in par_f_list:
@@ -203,8 +246,8 @@ def comput_iou_pp():
                 iu = cal_one_mean_iou(ann_p_copy, pred_p_copy, 2)
 
                 if iu[1] > 0.5:
-                    #### 每个人的
-                    for i in range(15):
+                    ### 每个人的
+                    for i in range(class_num):
                         if (pre == i).any():
                             bin_number = np.bincount(ann[pre == i])
                             maxid = np.argsort(bin_number)
@@ -213,34 +256,225 @@ def comput_iou_pp():
                                     # if mid < len(maxid)-1:
                                     #     continue
                                     if maxid[mid] and bin_number[maxid[mid]] > 0:
-                                        result_bool_1 = (pre == i) & (ann == maxid[mid]) & (result_numpy == 0)
+                                        # if i not in [14, 15, 16, 17, 18, 19]:
+                                        #         result_bool_1 = (pre == i)
+                                        #         result_numpy[result_bool_1] = i
+                                        # else:
+                                        result_bool_1 = (pre == i) & (ann == maxid[mid]) & (result_numpy == 0) #
                                         result_numpy[result_bool_1] = i
+                                        result_bool_1 = (pre == i) & (ann == maxid[mid]) & (result_numpy == 0)  #
+                                        result_numpy[result_bool_1] = i #
                             else:
                                 if maxid[0] > 0:
-                                    result_bool_1 = (pre == i) & (ann == maxid[0])
+                                    result_bool_1 = (pre == i)
                                     result_numpy[result_bool_1] = i
-
-        for i in range(15):
-            if (pred_all == i).any():
-                bin_number = np.bincount(ann_all[pred_all == i])
-                maxid = np.argsort(bin_number)
-                if len(maxid) > 1:
-                    for mid in reversed(range(len(maxid))):
-                        if mid < len(maxid)-2:
-                            continue
-                        if maxid[mid] and bin_number[maxid[mid]] > 0:
-                            result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
-                            result_numpy[result_bool_1] = i
                 else:
-                    if maxid[0] > 0:
-                        result_bool_1 = (ann_all == maxid[0]) & (result_numpy == 0)
-                        result_numpy[result_bool_1] = i
+                    result_bool_1 = pre > 0
+                    result_numpy[result_bool_1] = pre[pre > 0] #
+
+        for i in range(1, class_num):
+            if i in [1, 14]:
+                if (pred_all == i).any():
+                    bin_number = np.bincount(ann_all[pred_all == i])
+                    maxid = np.argsort(bin_number)
+                    print(bin_number[maxid[-1]] / np.sum(bin_number))
+                    if len(maxid) > 1 and bin_number[maxid[-1]] / np.sum(bin_number) > 0.2:
+                        for mid in reversed(range(len(maxid))):
+                            if mid < len(maxid) - 1:
+                                continue
+                            if not maxid[mid] in [2]:
+                                if maxid[mid] and bin_number[maxid[mid]] > 0:
+                                    result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
+                                    result_numpy[result_bool_1] = i
+                            else:
+                                continue
+                    else:
+                        if maxid[0] > 0:
+                            result_bool_1 = (ann_all == maxid[0]) & (result_numpy == 0)
+                            result_numpy[result_bool_1] = i
+            # elif i == 2 or i == 3: # or i == 2 or i == 3
+            #     if (pred_all == i).any():
+            #         bin_number = np.bincount(ann_all[pred_all == i])
+            #         maxid = np.argsort(bin_number)
+            #         if len(maxid) > 1 and bin_number[maxid[-1]] / np.sum(bin_number) > 0.5:
+            #             for mid in reversed(range(len(maxid))):
+            #                 if mid < len(maxid) - 1:
+            #                     continue
+            #                 if maxid[mid] and bin_number[maxid[mid]] > 0:
+            #                         result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
+            #                         result_numpy[result_bool_1] = i
+            #         else:
+            #             if maxid[0] > 0:
+            #                 result_bool_1 = (ann_all == maxid[0]) & (result_numpy == 0)
+            #                 result_numpy[result_bool_1] = i
+            # elif i == 1:  # or i == 2 or i == 3
+            #     if (pred_all == i).any():
+            #         bin_number = np.bincount(ann_all[pred_all == i])
+            #         maxid = np.argsort(bin_number)
+            #         print(bin_number[maxid[-1]] / np.sum(bin_number))
+            #         if len(maxid) > 1 and bin_number[maxid[-1]] / np.sum(bin_number) > 0.5:
+            #             for mid in reversed(range(len(maxid))):
+            #                 if mid < len(maxid) - 1:
+            #                     continue
+            #                 if maxid[mid] not in [10, 14, 15]:
+            #                     if maxid[mid] and bin_number[maxid[mid]] > 0:
+            #                         result_bool_1 = (ann_all == maxid[mid]) & (result_numpy == 0)
+            #                         result_numpy[result_bool_1] = i
+            #                 else:
+            #                     continue
+            #         else:
+            #             if maxid[0] > 0:
+            #                 result_bool_1 = (ann_all == maxid[0]) & (result_numpy == 0)
+            #                 result_numpy[result_bool_1] = i
+            # for i in range(1, class_num):
+            #     if i == 2:
+            #         result_bool_1 = (ann_all == 14) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+            #     elif i == 4:
+            #         result_bool_1 = (ann_all == 1) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+            #     elif i == 6:
+            #         result_bool_1 = ((ann_all == 10) | (ann_all == 11)) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+            #     elif i == 1:
+            #         result_bool_1 = ((ann_all == 12) | (ann_all == 13)) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+            #     elif i == 3:
+            #         result_bool_1 = ((ann_all == 6) | (ann_all == 7)) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+            #     elif i == 5:
+            #         result_bool_1 = ((ann_all == 8) | (ann_all == 9)) & (result_numpy == 0)
+            #         result_numpy[result_bool_1] = i
+        # for i in range(1, class_num):
+        #     if i == 14:
+        #         result_bool_1 = (ann_all == 2) & (result_numpy == 0)
+        #         result_numpy[result_bool_1] = i
+        #     if i == 1:
+        #         result_bool_1 = (ann_all == 4) & (result_numpy == 0)
+        #         result_numpy[result_bool_1] = i
+        #     elif i == 12 or i == 13:
+        #         result_bool_1 = (ann_all == 1) & (result_numpy == 0)
+        #         result_numpy[result_bool_1] = i
+        #     elif i == 10 or i == 11:
+        #         result_bool_1 = (ann_all == 6) & (result_numpy == 0)
+        #         result_numpy[result_bool_1] = i
+        #
         cv2.imwrite(os.path.join(save_dir_par, save_name), result_numpy)
-        vis_parsing(os.path.join(save_dir_par, save_name), '/home/xuhanzhu/inference_par/vis_par')
-        vis_parsing('/xuhanzhu/CIHP/train_seg/{}.png'.format(p_f_s), save_dir)
+        # vis_parsing(os.path.join(save_dir_par, save_name), save_dir_par_ori, 'MHP59', ori_img, True)
+        # vis_parsing('/xuhanzhu/%s/train_seg_uv/{}.png'.format(p_f_s) % datatset, save_dir, 'CIHP20', ori_img, True)
+        # vis_parsing(os.path.join(pred_all_dir, p_f_s + '.png'), save_dir_par_ins, 'MHP59', ori_img, False)
+        # draw_contous(p_f_s, con_dir, datatset)
         d += 1
+
+
+def draw_contous(id, dir, dataset):
+    mask = cv2.imread('/xuhanzhu/inference_par/%s/par/%s.png' % (dataset, id), 0)
+    img = cv2.imread('/xuhanzhu/inference_par/%s/vis_par_ins/%s.png' % (dataset, id))
+    #####
+    contours, _ = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(img, contours, -1, (0, 0, 255), 1)
+    cv2.imwrite(os.path.join(dir, '%s_ins.png' % id), img)
+
+
+def convert_parsing_2():
+    coco_folder = '/xuhanzhu/CIHP/'
+    cihp_coco = COCO(coco_folder + '/annotations/CIHP_train.json')
+    parsing_dir = '/xuhanzhu/inference_par/CIHP-COCO/par'
+    target_dir = '/xuhanzhu/CIHP'
+    im_ids = cihp_coco.getImgIds()
+    for i, im_id in enumerate(im_ids):
+        if i % 50 == 0:
+            print(i)
+        ann_ids = cihp_coco.getAnnIds(imgIds=im_id)
+        anns = cihp_coco.loadAnns(ann_ids)
+        im = cihp_coco.loadImgs(im_id)[0]
+        height = im['height']
+        width = im['width']
+        filename = im['file_name']
+        for ii, ann in enumerate(anns):
+            c = ann['category_id']
+            if c == 1:
+                parsing_save = np.zeros((height, width))
+                bbr = np.array(ann['bbox']).astype(int)  # the box.
+                parsing_name = os.path.join(parsing_dir, filename.replace('.jpg', '.png'))
+                # print(parsing_name)
+                if os.path.exists(parsing_name):
+                    parsing = cv2.imread(parsing_name, 0)
+                    x1, y1, x2, y2 = bbr[0], bbr[1], bbr[0] + bbr[2], bbr[1] + bbr[3]
+                    x2 = min([x2, width]);
+                    y2 = min([y2, height])
+                    parsing_save[y1:y2, x1:x2] = parsing[y1:y2, x1:x2]
+                save_name = os.path.join(target_dir + '/train_parsing_cdcl_coco', ann['parsing'])
+                cv2.imwrite(save_name, parsing_save)
+
+
+def vis_parsing_dir(new_dir, colormap, img_dir, parsing_dir, draw_contours):
+    coco_folder = '/xuhanzhu/mscoco2014'
+    cihp_coco = COCO(coco_folder + '/annotations/densepose_coco_2014_train.json')
+    im_ids = cihp_coco.getImgIds()
+
+    for im_id in sorted(im_ids):
+
+        im = cihp_coco.loadImgs(im_id)[0]
+        filename = im['file_name']
+
+        ori_path = os.path.join(img_dir, filename)
+        new_path = os.path.join(new_dir, filename)
+        parsing_path = os.path.join(parsing_dir, filename.replace('.jpg', '.png'))
+        parsing = cv2.imread(parsing_path, 0)
+        if os.path.exists(ori_path):
+            im_ori = cv2.imread(ori_path)
+            parsing_color_list = eval('colormap_utils.{}'.format('MHP59'))  # CIHP20
+            parsing_color_list = colormap_utils.dict_bgr2rgb(parsing_color_list)
+            colormap = colormap_utils.dict2array(parsing_color_list)
+            parsing_color = colormap[parsing.astype(np.int)]
+            # parsing_color = parsing_color[..., ::-1]
+
+            parsing_alpha = 0.9
+            idx = np.nonzero(parsing)
+            im_ori = im_ori.astype(np.float32)
+            im_ori[idx[0], idx[1], :] *= 1.0 - parsing_alpha
+            im_ori += parsing_alpha * parsing_color
+            #####
+            if draw_contours:
+                contours, _ = cv2.findContours(parsing.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(im_ori, contours, -1, (0, 0, 255), 1)
+
+            cv2.imwrite(new_path, im_ori)
+        else:
+            continue
+
+#
+def vis_parsing333(path, dir):
+    parsing = cv2.imread(path, 0)
+    parsing_color_list = eval('colormap_utils.{}'.format('MHP59'))  # CIHP20
+    parsing_color_list = colormap_utils.dict_bgr2rgb(parsing_color_list)
+    colormap = colormap_utils.dict2array(parsing_color_list)
+    parsing_color = colormap[parsing.astype(np.int)]
+    cv2.imwrite(os.path.join(dir, os.path.basename(path)), parsing_color)
+
+
+def vis_parsing_dir2():
+    dir = '/xuhanzhu/CIHP/train_parsing_cdcl_coco'
+    files = os.listdir(dir)
+    for file in files:
+        path = os.path.join(dir, file)
+        vis_parsing333(path, './vis')
+
 
 # compute_ious()
 # keypoints()
-comput_iou_pp()
+# compute_iou_pp()
+# draw_contous('0000015')
 # vis_parsing("/home/zhuxuhan/par_dir/0000001.png", './')
+# convert_parsing_2()
+# img_dir = '/xuhanzhu/mscoco2014/val2014'
+# new_dir = '/xuhanzhu/anno'
+# img_dir = '/xuhanzhu/output'
+# new_dir = '/xuhanzhu/output_anno'
+# parsing_dir = '/xuhanzhu/mscoco2014/train_parsing_cihp'
+# vis_parsing_dir(new_dir, 'MHP59', img_dir, parsing_dir, True)
+# vis_parsing_dir2()
+convert_parsing_2()
+
+#

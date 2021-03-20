@@ -29,7 +29,7 @@ def vis_parsing(img, parsing, colormap, show_segms=True):
     border_color = (255, 255, 255)
     border_thick = 1
 
-    img[idx[0], idx[1], :] *= 1.0 - parsing_alpha
+    img[idx[0], idx[1], :] *= (1.0 - parsing_alpha)
     # img[idx[0], idx[1], :] += alpha * parsing_color
     print(img.shape, parsing_color.shape)
     img += parsing_alpha * parsing_color

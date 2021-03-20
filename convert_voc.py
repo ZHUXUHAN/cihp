@@ -33,25 +33,32 @@ def vis_parsing(path, dir):
     cv2.imwrite(os.path.join(dir, os.path.basename(path)), parsing_color)
 
 
+def vis_all():
+    files = os.listdir('/xuhanzhu/pascal_person_part/train_parsing_cdcl')
+    for file in files:
+        path = os.path.join('/xuhanzhu/pascal_person_part/train_parsing_cdcl', file)
+        vis_parsing(path, '/xuhanzhu/pascal_person_part/vis')
+
+
 def convert_voc():
-    json_path = '/xuhanzhu/pascal_person_part/voc_2012_train.json'
+    json_path = '/xuhanzhu/pascal_person_part/voc_2012_val.json'
     label_path = '/xuhanzhu/pascal_person_part/pascal_person_part_label'
     label_train = '/xuhanzhu/pascal_person_part'
     gt_path = '/xuhanzhu/pascal_person_part/pascal_person_part_gt'
     coco_folder = '/xuhanzhu/pascal_person_part'
     img_dir = '/xuhanzhu/pascal_person_part/JPEGImages'
-    img_path = '/xuhanzhu/pascal_person_part/train_img'
+    img_path = '/xuhanzhu/pascal_person_part/val_img'
 
     cihp_coco = COCO(json_path)
     im_ids = cihp_coco.getImgIds()
 
-    chip_json = json.load(open(json_path, 'r'))
+    # chip_json = json.load(open(json_path, 'r'))
     # images = chip_json['images']
 
     categories = [{'name': 'person', 'id': 1, 'supercategory': 'person', 'parsing': ['background', \
-                                                                                     'Head', 'Torso', 'Upper-arms',
-                                                                                     'Lower-arms', 'Upper-legs',
-                                                                                     'Lower-legs']}]
+                                                                                     'Lower-arms', 'Head', 'Upper-legs',
+                                                                                     'Torso', 'Lower-legs',
+                                                                                     'Upper-arms']}]
     annotations = []
     images = []
     for i, im_id in enumerate(im_ids):
@@ -82,7 +89,7 @@ def convert_voc():
             img[y1:y2, x1:x2] = MaskIm[y1:y2, x1:x2]
             new_name = os.path.splitext(im['file_name'])[0] + '_%d' % ii + '.png'
             new_path = os.path.join(label_train, 'val_parsing', new_name)
-            cv2.imwrite(new_path, img)
+            # cv2.imwrite(new_path, img)
             ann["parsing"] = new_name
             ann['category_id'] = 1
             annotations.append(ann)
@@ -92,21 +99,20 @@ def convert_voc():
             images.append(im)
         else:
             print(im['file_name'])
-    save_json_path = coco_folder + '/annotations/pascal_person_part_train.json'
+    save_json_path = coco_folder + '/annotations/pascal_person_part_val.json'
     data_coco = {'images': images, 'categories': categories, 'annotations': annotations}
     json.dump(data_coco, open(save_json_path, 'w'), indent=4)
 
 
 def convert_seg():
     file_set = {}
-    path = '/xuhanzhu/pascal_person_part/train_parsing'
+    path = '/xuhanzhu/pascal_person_part/val_parsing'
     files = os.listdir(path)
-    save_path = '/xuhanzhu/pascal_person_part/train_seg'
+    save_path = '/xuhanzhu/pascal_person_part/val_seg'
     for file in files:
         # filename = file.split("-")[0]
         filename = '_'.join(file.split("_")[0:2])
         if filename not in file_set:
-            print(filename)
             file_set[filename] = [file]
         else:
             file_set[filename].append(file)
@@ -114,9 +120,10 @@ def convert_seg():
     for filename in file_set:
         if i % 100 == 0:
             print(i, filename)
-        mask = cv2.imread(os.path.join(path, file_set[filename][0]))
+        mask = cv2.imread(os.path.join(path, file_set[filename][0]), 0)
         for f in file_set[filename][1:]:
-            mask += cv2.imread(os.path.join(path, f))
+            mask_c = cv2.imread(os.path.join(path, f), 0)
+            mask[mask == 0] = mask_c[mask == 0]
         cv2.imwrite(os.path.join(save_path, filename + '.png'), mask)
         i += 1
 
@@ -232,7 +239,43 @@ def compute_iou():
         d += 1
 
 
+def convert_parsing_2():
+    coco_folder = '/xuhanzhu/mscoco2014/'
+    cihp_coco = COCO(coco_folder + '/annotations/densepose_parsing_coco_2014_train.json')
+    parsing_dir = '/xuhanzhu/CDCL-human-part-segmentation/output_ppp'
+    target_dir = '/xuhanzhu/pascal_person_part'
+    im_ids = cihp_coco.getImgIds()
+    for i, im_id in enumerate(im_ids):
+        if i % 50 == 0:
+            print(i)
+        ann_ids = cihp_coco.getAnnIds(imgIds=im_id)
+        anns = cihp_coco.loadAnns(ann_ids)
+        im = cihp_coco.loadImgs(im_id)[0]
+        height = im['height']
+        width = im['width']
+        filename = im['file_name']
+        for ii, ann in enumerate(anns):
+            c = ann['category_id']
+            if c == 1:
+                parsing_save = np.zeros((height, width))
+                bbr = np.array(ann['bbox']).astype(int)  # the box.
+                parsing_name = os.path.join(parsing_dir, filename.replace('.jpg', '.png'))
+                print(parsing_name)
+                if os.path.exists(parsing_name):
+                    parsing = cv2.imread(parsing_name, 0)
+                    x1, y1, x2, y2 = bbr[0], bbr[1], bbr[0] + bbr[2], bbr[1] + bbr[3]
+                    x2 = min([x2, width]);
+                    y2 = min([y2, height])
+                    parsing_save[y1:y2, x1:x2] = parsing[y1:y2, x1:x2]
+                save_name = os.path.join(target_dir + '/train_parsing_cdcl', ann['parsing'])
+                cv2.imwrite(save_name, parsing_save)
+
 # convert_voc()
 # convert_seg()
-compute_iou()
+# vis_all()
+# compute_iou()
 # vis_parsing('/xuhanzhu/pascal_person_part/train_parsing/2008_000041_2.png', './')
+# vis_all()
+# convert_seg()
+# vis_parsing('/xuhanzhu/pascal_person_part/val_parsing/2008_000090_1.png','./')
+convert_parsing_2()
